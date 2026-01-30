@@ -3,6 +3,12 @@ import json
 import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify
+import logging # Adicionar Import
+
+# Configuração de Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -38,10 +44,13 @@ def consultar_tcc(query: str):
         ).limit(5).all()
         
         if not results:
+            logger.warning(f"TCC: Nenhuma informação encontrada para query: {query}")
             return "Nenhuma informação encontrada no TCC sobre esse tema."
             
+        logger.info(f"TCC: {len(results)} chunks encontrados para query: {query}")
         return "\n\n".join([doc.content for doc in results])
     except Exception as e:
+        logger.error(f"Erro ao consultar TCC: {e}", exc_info=True)
         return f"Erro ao consultar TCC: {str(e)}"
     finally:
         db.close()
@@ -64,10 +73,13 @@ def consultar_iniciacao_cientifica(query: str):
         ).limit(5).all()
         
         if not results:
+            logger.warning(f"IC: Nenhuma informação encontrada para query: {query}")
             return "Nenhuma informação encontrada na Iniciação Científica sobre esse tema."
             
+        logger.info(f"IC: {len(results)} chunks encontrados para query: {query}")
         return "\n\n".join([doc.content for doc in results])
     except Exception as e:
+        logger.error(f"Erro ao consultar IC: {e}", exc_info=True)
         return f"Erro ao consultar IC: {str(e)}"
     finally:
         db.close()
@@ -90,10 +102,13 @@ def consultar_curriculo(query: str):
         ).limit(5).all()
         
         if not results:
+            logger.warning(f"Curriculo: Nenhuma informação encontrada para query: {query}")
             return "Nenhuma informação encontrada no currículo sobre esse tema."
             
+        logger.info(f"Curriculo: {len(results)} chunks encontrados para query: {query}")
         return "\n\n".join([doc.content for doc in results])
     except Exception as e:
+        logger.error(f"Erro ao consultar Curriculo: {e}", exc_info=True)
         return f"Erro ao consultar Currículo: {str(e)}"
     finally:
         db.close()
@@ -211,6 +226,7 @@ Vou te ajudar a escolher a melhor opção e planejar seu projeto de software!"""
         return resposta + cta
         
     except Exception as e:
+        logger.error(f"Erro ao calcular orçamento: {e}", exc_info=True)
         return f"""Erro ao calcular orçamento: {str(e)}
 
 Entre em contato comigo diretamente para um orçamento personalizado:
@@ -257,13 +273,13 @@ def init_vector_store():
                     text = f.read()
             
             if not text.strip():
-                print(f"Aviso: {filename} está vazio ou ilegível.")
+                logger.warning(f"Aviso: {filename} está vazio ou ilegível.")
                 continue
 
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             chunks = text_splitter.split_text(text)
             
-            print(f"  -> Gerando {len(chunks)} embeddings...")
+            logger.info(f"  -> Gerando {len(chunks)} embeddings para {filename}...")
             
             embeddings_to_add = []
             for chunk in chunks:
@@ -277,10 +293,10 @@ def init_vector_store():
             # Batch insert
             db.add_all(embeddings_to_add)
             db.commit()
-            print(f"  -> Sucesso: {filename} salvo.")
+            logger.info(f"  -> Sucesso: {filename} salvo.")
 
         except Exception as e:
-            print(f"  -> Erro ao processar {filename}: {e}")
+            logger.error(f"  -> Erro ao processar {filename}: {e}", exc_info=True)
             db.rollback()
 
 # Carregar dados ao iniciar
@@ -317,8 +333,10 @@ def chat():
     data = request.get_json()
     user_message = data.get('message')
     session_id = data.get('session_id')
+    logger.info(f"Nova requisição de chat recebida. Session ID: {session_id}")
 
     if not user_message:
+        logger.warning("Tentativa de chat sem mensagem.")
         return jsonify({"error": "Mensagem não fornecida"}), 400
 
     # Gerar session_id
@@ -471,14 +489,15 @@ def chat():
                         "id": str(uuid.uuid4())
                     }
                     ai_msg.tool_calls = [repaired_call]
+                    ai_msg.tool_calls = [repaired_call]
                     ai_msg.content = "" 
-                    print(f"Reparado tool call via regex: {repaired_call['name']}")
+                    logger.info(f"Reparado tool call via regex: {repaired_call['name']}")
                 except Exception as e:
-                    print(f"Falha ao tentar reparar tool call: {e}")
+                    logger.error(f"Falha ao tentar reparar tool call: {e}")
 
         # Processar Tool Calls (se houver)
         if ai_msg.tool_calls:
-            print(f"Tool(s) acionada(s): {[tc['name'] for tc in ai_msg.tool_calls]}")
+            logger.info(f"Tool(s) acionada(s): {[tc['name'] for tc in ai_msg.tool_calls]}")
             messages.append(ai_msg)
             for tool_call in ai_msg.tool_calls:
                 tool_name = tool_call["name"]
@@ -511,7 +530,7 @@ def chat():
             "session_id": session_id
         })
     except Exception as e:
-        print(f"Erro ao processar mensagem: {e}")
+        logger.critical(f"Erro crítico ao processar mensagem: {e}", exc_info=True)
         return jsonify({"error": "Erro interno", "details": str(e)}), 500
     finally:
         db.close()
