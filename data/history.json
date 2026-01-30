@@ -1,0 +1,14 @@
+{
+    "011e9946-b8e3-4477-9da3-ef6e1ce21b22": [
+        {
+            "role": "user",
+            "content": "Olá",
+            "timestamp": "2026-01-29T22:01:12.883508"
+        },
+        {
+            "role": "assistant",
+            "content": "Olá! Como posso ajudar você hoje? Estou especializado em desenvolvimento de sistemas autônomos, engenharia de agentes e integrações complexas com IA. Estou sempre prontinho para trabalhar em projetos que envolvam operações reais, controle de acesso e automação com hardware.",
+            "timestamp": "2026-01-29T22:01:12.883508"
+        }
+    ]
+}
