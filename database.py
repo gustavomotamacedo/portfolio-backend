@@ -11,7 +11,7 @@ load_dotenv()
 
 # Configuração do Banco
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/modelo_ia_db")
-EMBEDDING_DIM = 3584  # Dimensão do modelo qwen2.5:latest
+EMBEDDING_DIM = 1536  # Dimensão do modelo text-embedding-3-small (OpenAI)
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
