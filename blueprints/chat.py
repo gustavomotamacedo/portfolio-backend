@@ -3,7 +3,7 @@ import json
 import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -14,8 +14,8 @@ import pdfplumber
 chat_bp = Blueprint('chat', __name__)
 
 # Configuração do modelo e embeddings
-llm = ChatOllama(model="qwen2.5:latest")
-embeddings = OllamaEmbeddings(model="qwen2.5:latest")
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 # Inicializar Banco de Dados
 init_db()

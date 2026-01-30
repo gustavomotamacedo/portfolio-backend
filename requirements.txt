@@ -1,2 +1,11 @@
 flask
 flask-cors
+langchain-openai
+openai
+pypdf
+pdfplumber
+langchain
+langchain-community
+sqlalchemy
+psycopg2-binary
+python-dotenv
