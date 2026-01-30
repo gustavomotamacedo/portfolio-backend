@@ -12,3 +12,4 @@ openai
 tiktoken
 pypdf
 pdfplumber
+attrs
