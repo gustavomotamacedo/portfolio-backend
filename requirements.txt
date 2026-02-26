@@ -13,3 +13,4 @@ tiktoken
 pypdf
 pdfplumber
 attrs
+langgraph

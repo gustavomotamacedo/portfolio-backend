@@ -10,6 +10,11 @@ from sqlalchemy import or_
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode, tools_condition
+from typing import Annotated, TypedDict
+from langgraph.graph.message import add_messages
+
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -239,6 +244,44 @@ Entre em contato comigo diretamente para um orçamento personalizado:
     finally:
         db.close()
 
+@tool
+def obter_tempo_experiencia(data_inicio: str) -> str:
+    """
+    Ferramenta OBRIGATÓRIA para calcular o tempo exato de experiência em anos e meses.
+    O formato de data_inicio deve ser 'MM/AAAA' ou apenas o ano 'AAAA'. 
+    Use esta ferramenta sempre que precisar calcular há quanto tempo o candidato trabalha com certa tecnologia ou em certo cargo, baseado na data de hoje.
+    """
+    try:
+        agora = datetime.now()
+        mes_atual = agora.month
+        ano_atual = agora.year
+        
+        if "/" in data_inicio:
+            mes_str, ano_str = data_inicio.split("/")
+            mes_inicio = int(mes_str)
+            ano_inicio = int(ano_str)
+        else:
+            ano_inicio = int(data_inicio)
+            mes_inicio = 1 # Assume Janeiro se apenas o ano for fornecido
+            
+        meses_totais = (ano_atual - ano_inicio) * 12 + (mes_atual - mes_inicio)
+        anos = meses_totais // 12
+        meses = meses_totais % 12
+        
+        resultado = []
+        if anos > 0:
+            resultado.append(f"{anos} ano{'s' if anos > 1 else ''}")
+        if meses > 0:
+            resultado.append(f"{meses} mês{'es' if meses > 1 else ''}")
+            
+        if not resultado:
+            return "Menos de 1 mês"
+            
+        return " e ".join(resultado)
+    except Exception as e:
+        logger.error(f"Erro ao calcular tempo de experiência: {e}")
+        return "Erro ao calcular o tempo de experiência. Verifique o formato da data."
+
 def init_vector_store():
 
     """Escaneia a pasta de dados e indexa arquivos novos no banco."""
@@ -376,162 +419,90 @@ def chat():
                 context_messages.append(AIMessage(content=msg.content))
 
         # Prompt base
-        current_date = datetime.now().strftime("%d/%m/%Y")
-        system_instruction = f"""Você é Gustavo Mota Macedo e hoje é {current_date}.
-        Responda sempre em primeira pessoa, mantendo um tom natural e conversacional.
+        now = datetime.now()
+        data_extenso = now.strftime("%d/%m/%Y")
+        dia_semana = now.strftime("%A")
+        
+        system_instruction = f"""Você é Gustavo Mota Macedo.
+### CONTEXTO TEMPORAL CRÍTICO ###
+- Data de Hoje: {data_extenso} ({dia_semana})
+- Sua Localização Atual: São Paulo, Brasil (Fuso Horário BRT)
 
-        === REGRAS DE IDIOMA (ESTRITAS E INVIOLÁVEIS) ===
-        
-        VOCÊ ESTÁ PROIBIDO DE FALAR QUALQUER IDIOMA QUE NÃO SEJA PORTUGUÊS OU INGLÊS.
-        
-        1. **Português (Brasil)**: Use se o usuário falar português.
-        2. **Inglês**: Use se o usuário falar inglês OU qualquer outro idioma estranho.
-        
-        SE O USUÁRIO FALAR ESPANHOL, FRANCÊS, ITALIANO, ETC:
-        -> IGNORE O IDIOMA DELE E RESPONDA EM INGLÊS.
-        -> NÃO PEDIR DESCULPAS POR NÃO FALAR O IDIOMA, APENAS RESPONDA EM INGLÊS DIRETO.
-        
-        Exemplo:
-        User: "Hola, como estás?" (Espanhol)
-        Assistant: "Hello! I am doing well. How can I help you regarding my professional experience?" (Inglês)
+### DIRETRIZES DE RACIOCÍNIO (ReAct) ###
+Ao receber uma pergunta, você deve pensar passo a passo:
+1. **Thought (Raciocínio):** O que eu preciso saber para responder isso? Qual ferramenta devo usar?
+2. **Action (Ação):** Acionar a ferramenta necessária. Você pode acionar várias em sequência se a primeira não retornar tudo que precisa.
+3. **Observation (Observação):** O resultado me permite responder completamente? Se o usuário fala MÚLTIPLOS TÓPICOS, busque todos.
+4. **Considerar o Tempo**: Se o usuário perguntar "há quanto tempo", chame OBRIGATORIAMENTE a ferramenta `obter_tempo_experiencia` passando a data que encontrou para que o cálculo seja exato, baseado na Data de Hoje.
+5. **Priorizar o Recente**: Dê mais peso a informações recentes (próximas a {now.year}) ou atuações descritas como 'Atual'.
 
-        === REGRAS DE CONTEÚDO (NUNCA VIOLE) ===
+=== REGRAS DE IDIOMA (ESTRITAS E INVIOLÁVEIS) ===
+VOCÊ ESTÁ PROIBIDO DE FALAR QUALQUER IDIOMA QUE NÃO SEJA PORTUGUÊS OU INGLÊS.
+SE O USUÁRIO FALAR ESPANHOL, FRANCÊS, ITALIANO, ETC:
+-> IGNORE O IDIOMA DELE E RESPONDA DIRETO EM INGLÊS.
         
-        1. VOCÊ NÃO PODE INVENTAR INFORMAÇÕES
-        2. VOCÊ SÓ PODE RESPONDER COM BASE NOS RESULTADOS DAS FERRAMENTAS
-        3. SE A FERRAMENTA NÃO RETORNAR INFORMAÇÃO, VOCÊ DEVE DIZER QUE NÃO SABE
-        
-        === DIRETRIZES DE VENDAS E RECRUTAMENTO (PRIORIDADE MÁXIMA) ===
-        
-        Se você identificar que o usuário é um **Recrutador** (falando sobre vagas, entrevistas, oportunidades) OU um **Cliente Potencial** (interessado em fechar negócio, gostou do orçamento, quer começar):
+=== REGRAS DE CONTEÚDO (NUNCA VIOLE) ===
+1. VOCÊ NÃO PODE INVENTAR INFORMAÇÕES
+2. VOCÊ SÓ PODE RESPONDER COM BASE NOS RESULTADOS DAS FERRAMENTAS
+3. SE A FERRAMENTA NÃO RETORNAR INFORMAÇÃO, VOCÊ DEVE DIZER QUE NÃO SABE
 
-        1. **Adote uma postura proativa e entusiasta.**
-        2. **REDIRECIONE PARA O WHATSAPP IMEDIATAMENTE.**
-        3. Use frases como:
-           - "Isso soa ótimo! Vamos conversar melhor pelo WhatsApp para agilizarmos?"
-           - "Fico muito interessado nessa oportunidade. Pode me chamar no WhatsApp para marcarmos uma conversa?"
-           - "Excelente! Para darmos o próximo passo, me chame no WhatsApp."
-        
-        Sempre inclua o link direto: `https://wa.me/5573998061168`
+=== DIRETRIZES DE VENDAS E RECRUTAMENTO (PRIORIDADE MÁXIMA) ===
+Se você identificar que o usuário é um **Recrutador** ou **Cliente Potencial**:
+1. **Adote uma postura proativa e entusiasta.**
+2. **REDIRECIONE PARA O WHATSAPP IMEDIATAMENTE.**
+Exemplo: "Isso soa ótimo! Como hoje é {dia_semana} e estou em São Paulo, se você me chamar no WhatsApp agora, é provável que eu te responda rapidamente! Vamos conversar?"
+Link direto: `https://wa.me/5573998061168`
 
-        === GESTÃO DE CONHECIMENTO ===
+=== GESTÃO DE CONHECIMENTO ===
+- **Curriculo, habilidades, experiência profissional e contato**: `consultar_curriculo`
+- **TCC, Monografia, trabalho de conclusão**: `consultar_tcc`
+- **IC (Iniciação Científica), Hidrodinâmica, pesquisa**: `consultar_iniciacao_cientifica`
+- **Orçamento de software, estimativas, preço**: `calcular_orcamento_software`
+- **Cálculo de tempo de experiência**: `obter_tempo_experiencia`
+
+LEMBRE-SE: É MELHOR DIZER "NÃO SEI" DO QUE INVENTAR INFORMAÇÕES!
+"""
         
-        Para QUALQUER pergunta sobre:
-        - **Experiência profissional, habilidades, tecnologias, contato**: Use `consultar_curriculo`
-        - **TCC, Monografia, trabalho de conclusão**: Use `consultar_tcc`
-        - **Iniciação Científica (IC), Hidrodinâmica, pesquisa**: Use `consultar_iniciacao_cientifica`
-        - **Orçamento, preço, custo, estimativa de projeto de software**: Use `calcular_orcamento_software`
-        
-        === FLUXO OBRIGATÓRIO ===
-        
-        1. Identifique o tema da pergunta
-        2. Chame a ferramenta apropriada
-        3. Aguarde o resultado da ferramenta
-        4. Se a ferramenta retornar "Nenhuma informação encontrada" ou erro:
-           → Responda naturalmente que não tem essa informação específica
-           → Exemplo: "Não tenho essa informação detalhada disponível no momento. Posso te ajudar com outra coisa sobre minha carreira?"
-        5. Se a ferramenta retornar dados:
-           → Use APENAS essas informações
-           → Reformule de forma natural, em primeira pessoa
-           → NÃO adicione detalhes que não estão no resultado
-        
-        === O QUE NUNCA FAZER ===
-        
-        ❌ NUNCA invente nomes de pessoas (orientadores, colegas, etc.)
-        ❌ NUNCA invente datas específicas sem confirmação da ferramenta
-        ❌ NUNCA invente detalhes técnicos não mencionados pela ferramenta
-        ❌ NUNCA invente instituições, empresas ou projetos
-        ❌ NUNCA assume informações que "provavelmente" são verdade
-        
-        === O QUE FAZER ===
-        
-        ✅ Use SEMPRE as ferramentas para buscar informação
-        ✅ Seja honesto quando não souber algo
-        ✅ Mantenha tom natural e conversacional
-        ✅ Reformule as informações da ferramenta em primeira pessoa
-        ✅ Se não tiver certeza, admita
-        
-        === EXEMPLO DE BOA RESPOSTA (sem informação) ===
-        
-        Pergunta: "Quem foi seu orientador de IC?"
-        Ferramenta retorna: "Nenhuma informação encontrada"
-        Resposta correta: "Não tenho essa informação específica disponível na minha base de dados no momento. Se tiver outras dúvidas sobre minha trajetória, ficarei feliz em ajudar!"
-        
-        === EXEMPLO DE MÁ RESPOSTA (inventada) ===
-        
-        ❌ "Meu orientador foi o Prof. Dr. João Silva..." (NUNCA FAÇA ISSO!)
-        
-        LEMBRE-SE: É MELHOR DIZER "NÃO SEI" DO QUE INVENTAR INFORMAÇÕES!
-        """
-        
-        # Construir lista de mensagens (Sem contexto injetado forçadamente)
+        # Construir estado inicial do LangGraph
         messages = [SystemMessage(content=system_instruction)] + context_messages + [HumanMessage(content=user_message)]
         
-        # Bind Tools
-        tools = [consultar_curriculo, consultar_tcc, consultar_iniciacao_cientifica, calcular_orcamento_software]
+        # Configurar Agent
+        tools = [consultar_curriculo, consultar_tcc, consultar_iniciacao_cientifica, calcular_orcamento_software, obter_tempo_experiencia]
         llm_with_tools = llm.bind_tools(tools)
         
-        # Primeira execução
-        ai_msg = llm_with_tools.invoke(messages)
-        
-        # --- FALLBACK DE REPARO DE TOOL CALL ---
-        import re
-        if not ai_msg.tool_calls and ai_msg.content:
-            # Tentar encontrar padrão JSON de tool call no texto 
-            # (Adicionado consultar_curriculo no regex)
-            json_pattern = re.search(r'(\{.*"name":\s*"(?:consultar_tcc|consultar_iniciacao_cientifica|consultar_curriculo|calcular_orcamento_software)".*?\})', ai_msg.content.replace('\n', ' '))
-            if json_pattern:
-                try:
-                    raw_json = json_pattern.group(1)
-                    parsed_call = json.loads(raw_json)
-                    args = parsed_call.get("arguments") or parsed_call.get("parameters") or {}
-                    if isinstance(args, str):
-                         args = json.loads(args)
-
-                    repaired_call = {
-                        "name": parsed_call.get("name"),
-                        "args": args,
-                        "id": str(uuid.uuid4())
-                    }
-                    ai_msg.tool_calls = [repaired_call]
-                    ai_msg.tool_calls = [repaired_call]
-                    ai_msg.content = "" 
-                    logger.info(f"Reparado tool call via regex: {repaired_call['name']}")
-                except Exception as e:
-                    logger.error(f"Falha ao tentar reparar tool call: {e}")
-
-        # Processar Tool Calls (se houver)
-        if ai_msg.tool_calls:
-            logger.info(f"Tool(s) acionada(s): {[tc['name'] for tc in ai_msg.tool_calls]}")
-            messages.append(ai_msg)
-            for tool_call in ai_msg.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                
-                tool_output = "Ferramenta desconhecida."
-                if tool_name == "consultar_tcc":
-                    tool_output = consultar_tcc.invoke(tool_args)
-                elif tool_name == "consultar_iniciacao_cientifica":
-                    tool_output = consultar_iniciacao_cientifica.invoke(tool_args)
-                elif tool_name == "consultar_curriculo":
-                    tool_output = consultar_curriculo.invoke(tool_args)
-                elif tool_name == "calcular_orcamento_software":
-                    tool_output = calcular_orcamento_software.invoke(tool_args)
-                
-                messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_call['id']))
+        # Criar nós do Grafo
+        class GraphState(TypedDict):
+            messages: Annotated[list, add_messages]
             
-            # Segunda chamada ao LLM com o resultado da tool
-            response = llm_with_tools.invoke(messages)
-        else:
-            response = ai_msg
+        def chatbot(state: GraphState):
+            return {"messages": [llm_with_tools.invoke(state["messages"])]}
+            
+        # Compilar o LangGraph
+        graph_builder = StateGraph(GraphState)
+        graph_builder.add_node("chatbot", chatbot)
         
-        # Salvar resposta do assistente
-        ai_msg_db = ChatMessage(session_id=session_id, role="assistant", content=response.content)
+        tool_node = ToolNode(tools=tools)
+        graph_builder.add_node("tools", tool_node)
+        
+        graph_builder.add_conditional_edges("chatbot", tools_condition)
+        graph_builder.add_edge("tools", "chatbot")
+        graph_builder.set_entry_point("chatbot")
+        
+        app = graph_builder.compile()
+        
+        # Executar a rede (O loop ReAct)
+        final_state = app.invoke({"messages": messages})
+        
+        # O último message será do assistente
+        response_content = final_state["messages"][-1].content
+        
+        # Salvar resposta do assistente no banco
+        ai_msg_db = ChatMessage(session_id=session_id, role="assistant", content=response_content)
         db.add(ai_msg_db)
         db.commit()
         
         return jsonify({
-            "response": response.content,
+            "response": response_content,
             "session_id": session_id
         })
     except Exception as e:
