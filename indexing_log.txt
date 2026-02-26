@@ -1,0 +1,16 @@
+Skipping artigo_base--abtn.pdf: já indexado.
+Skipping artigo_base--abtn.pt.en.pdf: já indexado.
+Skipping calcular_orcamento_de_software.en.md: já indexado.
+Skipping calcular_orcamento_de_software.md: já indexado.
+Skipping Currículo (raw) - Gustavo Mota Macedo (backend).pdf: já indexado.
+Skipping Currículo (raw) - Gustavo Mota Macedo (fullstack).pdf: já indexado.
+Skipping potencial_hidrodinamica_completo.pdf: já indexado.
+Skipping potencial_hidrodinamica_completo.pt.en.pdf: já indexado.
+Skipping artigo_base--abtn.pdf: já indexado.
+Skipping artigo_base--abtn.pt.en.pdf: já indexado.
+Skipping calcular_orcamento_de_software.en.md: já indexado.
+Skipping calcular_orcamento_de_software.md: já indexado.
+Skipping Currículo (raw) - Gustavo Mota Macedo (backend).pdf: já indexado.
+Skipping Currículo (raw) - Gustavo Mota Macedo (fullstack).pdf: já indexado.
+Skipping potencial_hidrodinamica_completo.pdf: já indexado.
+Skipping potencial_hidrodinamica_completo.pt.en.pdf: já indexado.

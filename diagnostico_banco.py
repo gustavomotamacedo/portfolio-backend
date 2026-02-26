@@ -7,6 +7,7 @@ import os
 # Adicionar o diretório pai ao path para importar database
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from sqlalchemy import func
 from database import get_db, DocumentEmbedding
 
 def diagnosticar_banco():
@@ -25,7 +26,7 @@ def diagnosticar_banco():
         print("\n📁 Embeddings por arquivo (source):")
         sources = db.query(
             DocumentEmbedding.source,
-            db.func.count(DocumentEmbedding.id).label('count')
+            func.count(DocumentEmbedding.id).label('count')
         ).group_by(DocumentEmbedding.source).all()
         
         if not sources:

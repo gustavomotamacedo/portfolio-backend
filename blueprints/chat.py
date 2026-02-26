@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 import logging # Adicionar Import
+from sqlalchemy import or_
 
 # Configuração de Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -88,28 +89,32 @@ def consultar_iniciacao_cientifica(query: str):
 def consultar_curriculo(query: str):
     """
     Ferramenta OBRIGATÓRIA para buscar informações sobre Experiência Profissional, Habilidades, Contato, Resumo e Histórico do candidato.
-    A busca é restrita EXCLUSIVAMENTE ao arquivo: CURRICULO JAVA-1.pdf.
+    A busca abrange todos os arquivos de currículo disponíveis (ex: backend e fullstack).
     """
     try:
         db = next(get_db())
         query_vector = embeddings.embed_query(query)
         
-        # Filtra pelo arquivo do Currículo
+        # Filtra por arquivos que contenham "curriculo" no nome (case-insensitive)
+        # Usando ilike com curingas para capturar variações como 'Currículo' ou 'curriculo'
         results = db.query(DocumentEmbedding).filter(
-            DocumentEmbedding.source == 'CURRICULO JAVA-1.pdf'
+            or_(
+                DocumentEmbedding.source.ilike('%curriculo%'),
+                DocumentEmbedding.source.ilike('%currículo%')
+            )
         ).order_by(
             DocumentEmbedding.embedding.l2_distance(query_vector)
-        ).limit(5).all()
+        ).limit(10).all()
         
         if not results:
             logger.warning(f"Curriculo: Nenhuma informação encontrada para query: {query}")
-            return "Nenhuma informação encontrada no currículo sobre esse tema."
+            return "Nenhuma informação encontrada nos currículos sobre esse tema."
             
         logger.info(f"Curriculo: {len(results)} chunks encontrados para query: {query}")
         return "\n\n".join([doc.content for doc in results])
     except Exception as e:
         logger.error(f"Erro ao consultar Curriculo: {e}", exc_info=True)
-        return f"Erro ao consultar Currículo: {str(e)}"
+        return f"Erro ao consultar Currículos: {str(e)}"
     finally:
         db.close()
 
